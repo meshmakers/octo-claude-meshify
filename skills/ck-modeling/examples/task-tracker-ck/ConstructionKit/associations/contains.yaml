@@ -1,0 +1,8 @@
+$schema: https://schemas.meshmakers.cloud/construction-kit-elements.schema.json
+associationRoles:
+- id: Contains
+  description: Links an item to the board that contains it
+  inboundName: Board
+  outboundName: Items
+  inboundMultiplicity: One
+  outboundMultiplicity: N

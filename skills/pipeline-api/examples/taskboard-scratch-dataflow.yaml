@@ -1,0 +1,126 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# ---------------------------------------------------------------------------
+# DEMONSTRATES: the complete scratch-DataFlow shape for pipeline iteration,
+# plus a GET state-aggregation pipeline — read multiple entity types and
+# project them into one JSON response.
+#
+# Assumed CK model (replace with your own):
+#   TaskBoard/Board : Name (String), Score (Int)
+#   TaskBoard/Task  : Title (String), Done (Boolean), Points (Int),
+#                     AssignedTo (Enum), DueDate (String, optional)
+#
+# Iterate:  octo-cli -c ImportRt -f taskboard-scratch-dataflow.yaml -w
+#           (re-runs need -r; undeploy the DataFlow first — see
+#           ../references/deploy-and-debug.md)
+# Deploy:   octo-cli -c DeployDataFlow -id aaa000000000000000000001
+# Test (local development cluster):
+#           kubectl port-forward -n octo svc/<tenant>-670000000000000000000002 5020:80
+#           curl http://localhost:5020/<tenant>/state
+# ---------------------------------------------------------------------------
+dependencies:
+- System.Communication-[3.1,4.0)
+- TaskBoard-[1.0.0,2.0.0)
+entities:
+
+  # The DataFlow — parent container and shared event-hub exchange
+  - rtId: 'aaa000000000000000000001'
+    ckTypeId: System.Communication/DataFlow-1
+    attributes:
+      - id: System/Name-1
+        value: "TaskBoard API (scratch)"
+      - id: System/Description-1
+        value: "Scratch dataflow for TaskBoard HTTP API pipeline iteration."
+
+  # GET /state — aggregate board + tasks into one response document
+  - rtId: 'aaa000000000000000000002'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: 'aaa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'   # Mesh Adapter (platform-seeded fixed rtId)
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "task-get-state"
+      - id: System/Description-1
+        value: "GET /state — aggregated application state (board + tasks)"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP GET /state
+              method: Get
+              path: /state
+
+          transformations:
+            # ---- board singleton: pick single values out of the result set ----
+            - type: GetRtEntitiesByType@1
+              description: Board singleton
+              ckTypeId: TaskBoard/Board
+              take: 1
+              targetPath: $.boardL
+
+            - type: SetPrimitiveValue@1
+              valuePath: $.boardL.Items[0].Attributes.Name
+              valueType: String
+              targetPath: $.board.name
+            - type: SetPrimitiveValue@1
+              valuePath: $.boardL.Items[0].Attributes.Score
+              valueType: Int
+              targetPath: $.board.score
+
+            # ---- task list: project each entity via ForEach merge collection ----
+            - type: GetRtEntitiesByType@1
+              description: All tasks
+              ckTypeId: TaskBoard/Task
+              take: 500
+              targetPath: $.tasksL
+
+            - type: ForEach@1
+              description: Project raw entities into API items ($.key.out collects into $.tasks)
+              iterationPath: $.tasksL.Items
+              keyPath: $.key
+              mergePath: $.key.out
+              targetPath: $.tasks
+              transformations:
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.RtId
+                  valueType: String
+                  targetPath: $.key.out.id
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Title
+                  valueType: String
+                  targetPath: $.key.out.title
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Done
+                  valueType: Boolean
+                  targetPath: $.key.out.done
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Points
+                  valueType: Int
+                  targetPath: $.key.out.points
+                - type: SetPrimitiveValue@1
+                  description: Enum attributes read back as integer keys, not names
+                  valuePath: $.key.Attributes.AssignedTo
+                  valueType: Int
+                  targetPath: $.key.out.assignee
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.DueDate
+                  valueType: String
+                  targetPath: $.key.out.due
+
+            # ---- the final DataContext IS the HTTP response: shape it ----
+            - type: Project@1
+              description: Response = the aggregated state only
+              clear: true
+              fields:
+                - path: $.board
+                  inclusion: true
+                - path: $.tasks
+                  inclusion: true

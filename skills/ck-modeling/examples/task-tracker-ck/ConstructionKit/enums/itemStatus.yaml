@@ -1,0 +1,14 @@
+$schema: https://schemas.meshmakers.cloud/construction-kit-elements.schema.json
+enums:
+- enumId: ItemStatus
+  useFlags: false
+  values:
+  - key: 0
+    name: Open
+    description: Not started yet
+  - key: 1
+    name: InProgress
+    description: Currently being worked on
+  - key: 2
+    name: Done
+    description: Completed

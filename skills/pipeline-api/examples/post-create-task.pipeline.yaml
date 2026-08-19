@@ -1,0 +1,68 @@
+# ---------------------------------------------------------------------------
+# DEMONSTRATES: a POST create endpoint — request body → CreateUpdateInfo
+# (Insert, generated rtId) → ApplyChanges@2 → return the new id.
+#
+# This file is a pipeline DEFINITION only. Embed it as the
+# System.Communication/PipelineDefinition-1 attribute of a Pipeline entity
+# (see taskboard-scratch-dataflow.yaml for the wrapper) and deploy the
+# DataFlow, or push it directly with:
+#   octo-cli -c DeployPipeline -aid <adapterRtId> -pid <pipelineRtId> -f post-create-task.pipeline.yaml
+#   octo-cli -c DeployDataFlow -id <dataFlowRtId>     # flips debug back off
+#
+# Assumed CK model: TaskBoard/Task with Title (String), Done (Boolean),
+# Points (Int), AssignedTo (Enum), DueDate (String, optional).
+#
+# Wire contract:
+#   POST /tasks  body: { "title": "...", "points": 2, "assignee": "Alice", "due": "" }
+#   → { "id": "<24-hex rtId>" }
+#   Enum values are sent as member NAMES on write; reads return integer keys.
+# ---------------------------------------------------------------------------
+triggers:
+  - type: FromHttpRequest@1
+    description: HTTP POST /tasks
+    method: Post
+    path: /tasks
+
+transformations:
+  - type: CreateUpdateInfo@1
+    description: Insert the new task
+    updateKind: Insert
+    ckTypeId: TaskBoard/Task          # unversioned type id in pipeline YAML
+    rtIdPath: $.newRtId
+    generateRtId: true                # OK here — nothing references the new entity
+    targetPath: $.updates
+    targetValueWriteMode: Append
+    targetValueKind: Array
+    attributeUpdates:
+      - attributeName: Title          # exact attribute name from the CK model
+        attributeValueType: String
+        valuePath: $.body.title
+      - attributeName: Done
+        attributeValueType: Boolean
+        value: false
+      - attributeName: Points
+        attributeValueType: Int
+        valuePath: $.body.points
+      - attributeName: AssignedTo
+        attributeValueType: Enum
+        valuePath: $.body.assignee    # enum member NAME, e.g. "Alice"
+      - attributeName: DueDate        # always write optional attributes ("" default)
+        attributeValueType: String
+        valuePath: $.body.due
+
+  - type: ApplyChanges@2
+    description: Persist the batch
+    entityUpdatesPath: $.updates
+
+  # After apply, the generated id is available on the update-info object
+  - type: SetPrimitiveValue@1
+    valuePath: $.updates[0].RtId
+    valueType: String
+    targetPath: $.id
+
+  - type: Project@1
+    description: Response = { id }
+    clear: true
+    fields:
+      - path: $.id
+        inclusion: true

@@ -1,0 +1,69 @@
+# ---------------------------------------------------------------------------
+# DEMONSTRATES: ForEach accumulation via the mergePath/targetPath child-subtree
+# mechanism — build one update-info per matched entity and apply them as a
+# single batch. Also shows: field-filtered reads, guarding ApplyChanges with
+# TotalCount, and the error-as-payload response convention.
+#
+# KEY GOTCHA: absolute targetPaths inside ForEach (including $.full.…) do NOT
+# reach the root context. Each iteration writes into its child context at
+# mergePath ($.del); ForEach collects those subtrees into the parent array at
+# targetPath ($.dels).
+#
+# Pipeline DEFINITION only — embed in a Pipeline entity as in
+# taskboard-scratch-dataflow.yaml.
+#
+# Wire contract:
+#   POST /tasks/clear-done   (no body)  → { "ok": true }
+# ---------------------------------------------------------------------------
+triggers:
+  - type: FromHttpRequest@1
+    description: HTTP POST /tasks/clear-done
+    method: Post
+    path: /tasks/clear-done
+
+transformations:
+  - type: GetRtEntitiesByType@1
+    description: All tasks already marked done
+    ckTypeId: TaskBoard/Task
+    take: 500
+    targetPath: $.lookup
+    fieldFilters:
+      - attributePath: Done
+        operator: Equals
+        comparisonValue: true
+
+  - type: ForEach@1
+    description: One Delete per done task — child $.del subtrees collect into $.dels
+    iterationPath: $.lookup.Items
+    keyPath: $.key
+    mergePath: $.del
+    targetPath: $.dels
+    transformations:
+      - type: CreateUpdateInfo@1
+        updateKind: Delete
+        ckTypeId: TaskBoard/Task
+        rtIdPath: $.key.RtId          # current item's id from the child context
+        targetPath: $.del             # child-context path — matches mergePath
+        attributeUpdates: []
+
+  - type: If@1
+    description: Apply only when something matched
+    path: $.lookup.TotalCount
+    operator: GreaterThan
+    value: 0
+    valueType: Int
+    transformations:
+      - type: ApplyChanges@2
+        entityUpdatesPath: $.dels
+
+  - type: SetPrimitiveValue@1
+    value: true
+    valueType: Boolean
+    targetPath: $.ok
+
+  - type: Project@1
+    description: Response = { ok }
+    clear: true
+    fields:
+      - path: $.ok
+        inclusion: true

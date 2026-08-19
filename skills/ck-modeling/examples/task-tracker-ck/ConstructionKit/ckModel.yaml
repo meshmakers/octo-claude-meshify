@@ -1,0 +1,5 @@
+$schema: https://schemas.meshmakers.cloud/construction-kit-meta.schema.json
+modelId: TaskTracker-1.0.0
+description: Minimal example model — a board that contains tracked items.
+dependencies:
+- System-[2.0,3.0)

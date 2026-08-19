@@ -1,0 +1,17 @@
+$schema: https://schemas.meshmakers.cloud/construction-kit-elements.schema.json
+types:
+- typeId: Item
+  description: A tracked item that belongs to exactly one board.
+  derivedFromCkTypeId: ${System}/Entity-1
+  displayNameRule: "${ItemTitle}"
+  attributes:
+  - id: ${this}/ItemTitle-1
+    name: ItemTitle
+  - id: ${this}/ItemStatus-1
+    name: ItemStatus
+  - id: ${this}/ItemSortOrder-1
+    name: ItemSortOrder
+    isOptional: true
+  associations:
+  - id: ${this}/Contains-1
+    targetCkTypeId: ${this}/Board-1

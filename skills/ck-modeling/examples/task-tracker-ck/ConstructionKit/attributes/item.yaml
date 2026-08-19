@@ -1,0 +1,14 @@
+$schema: https://schemas.meshmakers.cloud/construction-kit-elements.schema.json
+attributes:
+- id: ItemTitle
+  description: Short title of the tracked item
+  valueType: String
+
+- id: ItemStatus
+  description: Current status of the item
+  valueType: Enum
+  valueCkEnumId: ${this}/ItemStatus
+
+- id: ItemSortOrder
+  description: Manual sort position within the board
+  valueType: Int

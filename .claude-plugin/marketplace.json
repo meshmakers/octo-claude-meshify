@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "octo-claude-meshify",
+  "description": "OctoMesh application development skills for Claude Code",
+  "owner": {
+    "name": "Meshmakers",
+    "email": "reimar.klammer@meshmakers.io"
+  },
+  "plugins": [
+    {
+      "name": "octo-claude-meshify",
+      "description": "Skills for building applications on OctoMesh and for migrating (\"meshifying\") existing applications onto the platform: Construction Kit data modeling, declarative HTTP APIs built from ETL pipelines on the Mesh Adapter, GraphQL data-layer integration for apps that keep their own backend, and packaging everything as an installable blueprint with a Helm-chart-deployed web app.",
+      "version": "0.1.0",
+      "source": "./",
+      "author": {
+        "name": "Meshmakers"
+      }
+    }
+  ]
+}

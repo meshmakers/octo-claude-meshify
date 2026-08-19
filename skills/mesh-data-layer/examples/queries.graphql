@@ -1,0 +1,183 @@
+# Example GraphQL operations against the OctoMesh per-tenant endpoint:
+#   https://{asset-repo-host}/tenants/{tenantId}/graphql
+#
+# These use a hypothetical CK model "Acme.Assets" with a type "Machine"
+# (attributes: name, serialNumber, status [enum: ACTIVE, INACTIVE, MAINTENANCE])
+# associated to a type "Location" via the association role "Acme.Assets/MachineLocation".
+#
+# Typed field names (acmeAssetsMachine, acmeAssetsMachines, ...) are GENERATED from
+# your own CK model's namespace + type name and will differ for your model — introspect
+# your tenant's schema (see ../references/graphql-api.md § "Exporting the schema for client
+# codegen") to get the real names. The generic runtimeEntities operations at the bottom
+# work against any CK type without knowing the generated names in advance.
+
+# -----------------------------------------------------------------------------
+# 1. Query with filter + pagination (typed API)
+# -----------------------------------------------------------------------------
+query GetActiveMachines($first: Int!, $after: String) {
+  runtime {
+    acmeAssetsMachine(
+      first: $first
+      after: $after
+      fieldFilter: [{ attributePath: "status", operator: EQUALS, comparisonValue: "ACTIVE" }]
+      sortOrder: [{ attributePath: "name", sortOrder: ASCENDING }]
+    ) {
+      items {
+        rtId
+        ckTypeId
+        name
+        serialNumber
+        status
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+        totalCount
+      }
+    }
+  }
+}
+
+# Variables:
+# { "first": 20, "after": null }
+
+
+# -----------------------------------------------------------------------------
+# 2. Association navigation: typed navigation property
+# -----------------------------------------------------------------------------
+query GetMachineWithLocation($rtId: OctoObjectId!) {
+  runtime {
+    acmeAssetsMachine(rtId: $rtId) {
+      items {
+        rtId
+        name
+        location {
+          acmeAssetsLocation {
+            items {
+              rtId
+              name
+              address
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+
+# -----------------------------------------------------------------------------
+# 2b. Association navigation: generic API (works without knowing typed field names)
+# -----------------------------------------------------------------------------
+query GetMachineLocationsGeneric($rtId: OctoObjectId!) {
+  runtime {
+    runtimeEntities(ckId: "Acme.Assets/Machine", rtId: $rtId) {
+      items {
+        rtId
+        associations(
+          roleId: "Acme.Assets/MachineLocation"
+          direction: OUTBOUND
+          ckId: "Acme.Assets/Location"
+        ) {
+          items {
+            rtId
+            ckTypeId
+          }
+        }
+      }
+    }
+  }
+}
+
+
+# -----------------------------------------------------------------------------
+# 3. Create mutation, with association to an existing Location (typed API)
+# -----------------------------------------------------------------------------
+mutation CreateMachine($entities: [AcmeAssetsMachineInput]!) {
+  runtime {
+    acmeAssetsMachines {
+      create(entities: $entities) {
+        rtId
+        name
+        status
+      }
+    }
+  }
+}
+
+# Variables:
+# {
+#   "entities": [
+#     {
+#       "name": "Press Line 3",
+#       "serialNumber": "PL3-2026-001",
+#       "status": "ACTIVE",
+#       "location": [{ "modOption": "CREATE", "target": { "rtId": "693c4cd3464d7d9e1396cf0d", "ckTypeId": "Acme.Assets/Location" } }]
+#     }
+#   ]
+# }
+
+
+# -----------------------------------------------------------------------------
+# 3b. Create mutation, generic API (portable across unknown CK types)
+# -----------------------------------------------------------------------------
+mutation CreateEntityGeneric {
+  runtime {
+    runtimeEntities {
+      create(
+        entities: [{
+          ckTypeId: "Acme.Assets/Machine"
+          attributes: [
+            { attributeName: "name", value: "Press Line 3" }
+            { attributeName: "serialNumber", value: "PL3-2026-001" }
+            { attributeName: "status", value: "ACTIVE" }
+          ]
+        }]
+      ) {
+        rtId
+      }
+    }
+  }
+}
+
+
+# -----------------------------------------------------------------------------
+# 4. Update mutation — only listed fields change; rtId is always required
+# -----------------------------------------------------------------------------
+mutation UpdateMachineStatus($entities: [AcmeAssetsMachineInputUpdate]!) {
+  runtime {
+    acmeAssetsMachines {
+      update(entities: $entities) {
+        rtId
+        status
+      }
+    }
+  }
+}
+
+# Variables:
+# {
+#   "entities": [
+#     { "rtId": "693c5b93464d7d9e1396cf1c", "item": { "status": "MAINTENANCE" } }
+#   ]
+# }
+
+
+# -----------------------------------------------------------------------------
+# 5. Delete mutation — always generic, ckTypeId is the UNVERSIONED type id
+# -----------------------------------------------------------------------------
+mutation DeleteMachine($rtEntityIds: [RtEntityId]!, $options: DeleteOptions) {
+  runtime {
+    runtimeEntities {
+      delete(options: $options, entities: $rtEntityIds)
+    }
+  }
+}
+
+# Variables (ARCHIVE = soft delete/default, ERASE = permanent):
+# {
+#   "options": "ARCHIVE",
+#   "rtEntityIds": [
+#     { "rtId": "693c5b93464d7d9e1396cf1c", "ckTypeId": "Acme.Assets/Machine" }
+#   ]
+# }

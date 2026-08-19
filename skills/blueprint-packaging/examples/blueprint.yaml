@@ -1,0 +1,49 @@
+# Blueprint manifest — minimal but realistic example.
+# Catalog layout: blueprints/v1/TicketDesk/1.0.0/{blueprint.yaml, seed-data/entities.yaml}
+# Validate with:  octo-bpm -c validate -p ./TicketDesk/1.0.0
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: TicketDesk-1.0.0
+description: |
+  TicketDesk — a small ticket tracker running fully on OctoMesh.
+
+  What this blueprint installs:
+  - the TicketDesk construction kit model (auto-imported from the CK catalog)
+  - a DataFlow with the HTTP API pipelines, hosted by the tenant's Mesh Adapter
+  - a Settings singleton as domain seed (user-editable after install)
+  - the TicketDesk web app as an Application workload, rolled out to Kubernetes
+    by the Communication Operator as a Helm release
+
+  PREREQUISITE: communication must be enabled on the target tenant. The
+  service-managed System.Communication blueprint seeds the Pool
+  (670000000000000000000001) and Mesh Adapter (670000000000000000000002)
+  this seed associates to, and the pool + adapter must be deployed and Online.
+
+  Install only seeds entities — trigger the rollout afterwards:
+    octo-cli -c DeployDataFlow -id 0abc00000000000000000001
+    octo-cli -c DeployWorkload -id 0abc00000000000000000020
+
+# CK models pulled from the configured CK catalogs at install time.
+# Consumers never run a manual ImportCk.
+ckModelDependencies:
+  - TicketDesk-[1.0.0,2.0.0)
+
+# Other blueprints this one builds on (resolved transitively, applied first).
+# System.Communication is NOT declared here — it is service-managed and always
+# already present on a communication-enabled tenant.
+# blueprintDependencies:
+#   - BaseEntities-[1.0,)
+
+seedDataPath: seed-data/entities.yaml
+
+# Optional migration scripts for non-additive updates from older versions.
+# migrations:
+#   - fromVersion: "1.0.0"
+#     scriptPath: "migrations/from-1.0.0.yaml"
+
+# Optional environment gate. A mismatch makes the install a SUCCESSFUL no-op
+# (WasSkipped: true) — use this when the rollout depends on environment
+# capabilities (e.g. the Communication Operator running there).
+# requires:
+#   octo.environment:
+#     - dev
+#     - test

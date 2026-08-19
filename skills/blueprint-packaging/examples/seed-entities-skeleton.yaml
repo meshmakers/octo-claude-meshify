@@ -1,0 +1,146 @@
+# Seed-data skeleton for the TicketDesk-1.0.0 example blueprint.
+# ---------------------------------------------------------------------------
+# One runtime-model file, ONE entities: sequence — keep every entity list item
+# at the same indentation.
+#
+# rtIds are hand-assigned, stable 24-hex ids with a recognizable prefix
+# (0abc…) so re-applies are idempotent (upsert by rtId) and the entities are
+# easy to spot on any tenant. If you ever regenerate rtIds, update BOTH the
+# outer entity rtIds AND every reference embedded in pipeline block scalars
+# (e.g. targetPipelineRtId) — they are plain strings inside the YAML.
+#
+# Associations to 670000000000000000000001/002 resolve against the entities
+# the service-managed System.Communication blueprint seeds on every
+# communication-enabled tenant (Pool / Mesh Adapter).
+# ---------------------------------------------------------------------------
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- System.Communication-[3.1,4.0)
+- TicketDesk-[1.0.0,2.0.0)
+entities:
+
+  # ==========================================================================
+  # Domain seed — a user-editable Settings singleton.
+  # RtBlueprintLocked: false hands the entity to the user: blueprint UPDATES
+  # (Merge/Full) skip it, so user edits survive upgrades. Note that a force
+  # re-apply (InstallBlueprint -f) still resets it — that is the factory reset.
+  # Attribute ids must match your CK model (versioned: Model/Attribute-1).
+  # ==========================================================================
+  - rtId: '0abc00000000000000000030'
+    ckTypeId: TicketDesk/Settings-1
+    attributes:
+      - id: System/RtBlueprintLocked-1
+        value: false
+      - id: TicketDesk/BoardName-1
+        value: "Support Board"
+
+  # ==========================================================================
+  # DataFlow — the logical container for the API pipelines
+  # ==========================================================================
+  - rtId: '0abc00000000000000000001'
+    ckTypeId: System.Communication/DataFlow-1
+    attributes:
+      - id: System/Name-1
+        value: "TicketDesk API"
+      - id: System/Description-1
+        value: "HTTP API for TicketDesk, hosted by the tenant's Mesh Adapter."
+
+  # ==========================================================================
+  # Pipeline — GET /tickets, executed by the Mesh Adapter.
+  # Every pipeline needs BOTH associations:
+  #   ParentChild -> the DataFlow above (so DeployDataFlow finds it)
+  #   Executes    -> the adapter that runs it (Mesh Adapter 670…002)
+  # The pipeline YAML lives INLINE as a block scalar in PipelineDefinition-1.
+  # DeploymentState 0 = Undeployed; DeployDataFlow performs the rollout.
+  # ==========================================================================
+  - rtId: '0abc00000000000000000002'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0abc00000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'   # Mesh Adapter (platform-seeded, fixed rtId)
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "ticket-list"
+      - id: System/Description-1
+        value: "GET /tickets — list all tickets"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP GET /tickets
+              method: Get
+              path: /tickets
+
+          transformations:
+            # Node config shapes evolve — verify each node against its doc page
+            # under technologyGuide/communication/dataFlows/nodes/ before use.
+            - type: GetRtEntitiesByType@1
+              description: Load all tickets
+              ckTypeId: TicketDesk/Ticket        # UNVERSIONED type id inside pipeline YAML
+              targetPath: $.lookup
+
+            # The HTTP response is the ENTIRE final data context. Always end
+            # with Project@1 clear: true, listing only the response fields —
+            # otherwise the raw request and lookup internals leak out.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.lookup.Items
+                  inclusion: true
+
+          # Cross-pipeline calls reference other seed pipelines by rtId, e.g.:
+          #   - type: ToPipelineDataEvent@1
+          #     targetPipelineRtId: 0abc00000000000000000003
+          #     awaitResult: true
+          # Keep such embedded rtIds in sync with the outer entity rtIds!
+
+  # ==========================================================================
+  # Application — the web app, helm-installed by the Communication Operator
+  # on DeployWorkload. See ../references/app-workload-and-helm.md.
+  # ==========================================================================
+  - rtId: '0abc00000000000000000020'
+    ckTypeId: System.Communication/Application-1
+    associations:
+      # Deploy target: the pool the operator owns.
+      - roleId: System.Communication/Manages-1
+        targetRtId: '670000000000000000000001'
+        targetCkTypeId: System.Communication/Pool-1
+      # Chart source. Either reference a Helm repository configuration already
+      # present on the tenant, or seed your own HelmRepositoryConfiguration
+      # entity (RepositoryUrl + Channel) and point this association at it.
+      - roleId: System.Communication/HelmRepository-1
+        targetRtId: '670000000000000000000003'
+        targetCkTypeId: System.Communication/HelmRepositoryConfiguration-1
+    attributes:
+      - id: System/Name-1
+        value: TicketDesk App
+      - id: System.Communication/ChartName-1
+        value: ticket-desk-app
+      # Empty = always pull the newest chart from the repository. The image
+      # tag then follows the chart's appVersion — never pin tags here.
+      - id: System.Communication/ChartVersion-1
+        value: ""
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      # The proxy only talks HTTP to the Mesh Adapter — no cluster secrets.
+      - id: System.Communication/ReceivesClusterSecrets-1
+        value: false
+      # Typed ingress: ${octo.tenantId} resolves at blueprint apply,
+      # {{domain.default}} at deploy time per cluster — one seed, every cluster.
+      - id: System.Communication/IngressEnabled-1
+        value: true
+      - id: System.Communication/Hostname-1
+        value: 'ticketdesk-${octo.tenantId}.{{domain.default}}'
+      # Base Helm values. upstreamUrl points at the Mesh Adapter's in-cluster
+      # service (plain HTTP :80, routes prefixed with the tenant id).
+      - id: System.Communication/ValuesYaml-1
+        value: |
+          upstreamUrl: http://${octo.tenantId}-670000000000000000000002.octo.svc.cluster.local:80/${octo.tenantId}

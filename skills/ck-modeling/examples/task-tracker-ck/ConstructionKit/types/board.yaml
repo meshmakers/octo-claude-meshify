@@ -1,0 +1,9 @@
+$schema: https://schemas.meshmakers.cloud/construction-kit-elements.schema.json
+types:
+- typeId: Board
+  description: A board that groups tracked items.
+  derivedFromCkTypeId: ${System}/Entity-1
+  displayNameRule: "${BoardName}"
+  attributes:
+  - id: ${this}/BoardName-1
+    name: BoardName
