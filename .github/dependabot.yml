@@ -1,0 +1,31 @@
+# Dependabot standard configuration.
+# One entry per ecosystem and manifest directory, minor/patch updates grouped, an explicit
+# open-pull-requests-limit, and the majors we hold on purpose ignored (remove an ignore only
+# together with the story that delivers that migration).
+version: 2
+updates:
+  - package-ecosystem: "docker"
+    directory: "/skills/blueprint-packaging/examples"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    groups:
+      docker-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # a new .NET major is a platform decision, not a Dependabot bump
+      - dependency-name: "mcr.microsoft.com/dotnet/*"
+        update-types: ["version-update:semver-major"]
+      # same images, Dependabot may name them without the registry host
+      - dependency-name: "dotnet/*"
+        update-types: ["version-update:semver-major"]
+      # Node majors are planned
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      # nginx majors are planned
+      - dependency-name: "nginx"
+        update-types: ["version-update:semver-major"]
+      # internal images: legacy date-based tags sort above semver, our pipelines manage them
+      - dependency-name: "meshmakers/*"
